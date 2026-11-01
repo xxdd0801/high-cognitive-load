@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实验二</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #111; color: #eee;
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  }
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .screen { display: none; width: 100%; max-width: 860px; padding: 48px 32px; text-align: center; }
+  .screen.active { display: block; }
+  h1, h2 { font-weight: 600; margin-top: 0; }
+  p { line-height: 1.85; font-size: 22px; }
+  .hint { color: #aaa; font-size: 18px; }
+  button {
+    margin-top: 24px; padding: 12px 36px; font-size: 20px;
+    background: #2d7ef7; color: white; border: none; border-radius: 8px;
+    cursor: pointer; font-family: inherit;
+  }
+  button:hover { background: #1f6ae0; }
+  button:disabled { background: #444; cursor: not-allowed; }
+  input[type=text] {
+    padding: 10px 14px; font-size: 20px; border-radius: 8px; border: 1px solid #555;
+    background: #1e1e1e; color: #eee; font-family: inherit; text-align: center;
+  }
+  .field { margin: 18px 0; }
+  .field label { display: block; margin-bottom: 8px; color: #ccc; }
+  #fixation-dot { font-size: 96px; line-height: 1; }
+  .audio-status {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #333; letter-spacing: 2px;
+  }
+  #arith-wrap {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; pointer-events: none; z-index: 100;
+  }
+  #arith-wrap.active { display: flex; }
+  #arith-question { font-size: 76px; color: #ffe066; font-weight: 700; letter-spacing: 2px; }
+  #arith-input { font-size: 46px; color: #fff; margin-top: 24px; min-height: 52px; }
+  #arith-hint { font-size: 16px; color: #888; margin-top: 16px; }
+  .slider-labels { display: flex; justify-content: space-between; color: #aaa; font-size: 18px; margin: 28px 0 8px; }
+  .slider-mid { color: #ccc; }
+  input[type=range] { width: 100%; height: 36px; accent-color: #2d7ef7; cursor: pointer; }
+  .value-display { font-size: 44px; font-weight: 700; color: #ffe066; margin: 8px 0 4px; }
+  .sub-value { font-size: 20px; color: #aaa; }
+  .error { color: #ff6b6b; margin-top: 18px; white-space: pre-wrap; line-height: 1.6; }
+  .progress { color: #888; font-size: 14px; margin-top: 32px; }
+
+/* 共情三条目 */
+#empathy-items { margin-top: 8px; }
+.empathy-item {
+  margin: 22px 0 0; padding: 16px 18px;
+  background: #191919; border-radius: 10px; text-align: left;
+}
+.empathy-item .empathy-q { font-size: 20px; margin-bottom: 4px; color: #ddd; }
+.empathy-item .slider-labels { margin: 8px 0 2px; font-size: 16px; }
+.empathy-item .empathy-value {
+  font-size: 24px; font-weight: 600; color: #ffe066;
+  text-align: center; margin-top: 4px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- 1. 开始 / 被试信息 -->
+<section id="screen-start" class="screen active">
+  <h1>实验说明</h1>
+  <p>欢迎您的参加！本实验旨在了解人们在倾听他人分享后的感受与反应。<br>
+     实验过程中，你将听到6段由其他参与者提前录制的语音材料 <br>
+     这是他们对于自己一些经历的分享。<br>
+     在听每一段音频的同时，屏幕中央会不时出现两位数加减法题目，<br>
+     请你在听音频的同时，<strong>【又快又准】</strong>地口头计算，并按数字键作答。<br>
+     每段音频结束后，你需要对该讲述者进行评价，并和她进行一个资源分配任务。</p>
+  <p class="hint">请您佩戴好耳机，在安静环境中完成。实验过程中请勿刷新或关闭页面。</p>
+  <div class="field">
+    <label>被试编号</label>
+    <input type="text" id="participant-id" placeholder="如 01">
+  </div>
+  <button id="btn-start-experiment">开始实验</button>
+  <div id="load-error" class="error"></div>
+</section>
+
+<!-- 2. 指导语 -->
+<section id="screen-instruction" class="screen">
+  <h2>实验须知</h2>
+  <p>音频开始后，请您像平时倾听朋友说话一样，认真听每一段语音。<br>
+     听的过程中会随机出现算术题，请尽快用键盘输入答案，按 <strong>Enter</strong> 提交。<br>
+     音频结束后，请根据你真实的感受完成评价与分配决策。</p>
+  <p class="hint">按 空格键 或点击下方按钮开始第一段音频。</p>
+  <button id="btn-instruction-continue">我明白了，开始</button>
+</section>
+
+<!-- 3. 试次间提示 -->
+<section id="screen-trial-prompt" class="screen">
+  <h2 id="trial-prompt-title"></h2>
+  <p class="hint">按 空格键 或点击按钮继续</p>
+  <button id="btn-trial-continue">继续</button>
+</section>
+
+<!-- 4. 注视点 -->
+<section id="screen-fixation" class="screen">
+  <div id="fixation-dot">+</div>
+</section>
+
+<!-- 5. 音频播放（黑屏） -->
+<section id="screen-audio" class="screen">
+  <div class="audio-status">正在聆听……</div>
+</section>
+
+<!-- 6. 评分屏 -->
+<section id="screen-rating" class="screen">
+  <h2 id="rating-title"></h2>
+  <div class="slider-labels">
+    <span id="rating-left"></span>
+    <span id="rating-mid" class="slider-mid"></span>
+    <span id="rating-right"></span>
+  </div>
+  <input type="range" id="rating-slider" min="1" max="100" step="1" value="50">
+  <div id="rating-value" class="value-display">5</div>
+  <button id="rating-confirm">确认</button>
+</section>
+
+<!-- 6.5 共情评分（三条目同页） -->
+<section id="screen-empathy" class="screen">
+  <h2>对于这位同伴，请你回答以下问题</h2>
+  <div id="empathy-items"></div>
+  <button id="empathy-confirm" style="margin-top:32px;">确认</button>
+</section>
+
+<!-- 7. 独裁者博弈 -->
+<section id="screen-dictator" class="screen">
+  <h2>分配决策</h2>
+  <p>接下来，你将和这位同伴进行一个资源分配任务。<br>
+     在这个任务中，你扮演【分配者】的角色。<br>
+     你目前拥有 <strong id="dictator-endowment">100</strong> 代币。<br>
+     作为分配者，你可以将其中任意金额分配给她，剩余部分归你所有。<br>
+
+     你的【最终实验报酬】将由基本被试费和【你在该任务中保留的代币】共同决定。<br>
+     这位同伴的报酬将由【你在该任务中分配给她的金额】决定。<br>
+
+     请移动滑块选择你愿意给出的金额，点击确认。</p>
+  <div class="slider-labels">
+    <span>0 </span>
+    <span id="dictator-mid" class="slider-mid"></span>
+    <span id="dictator-max-label">100</span>
+  </div>
+  <input type="range" id="dictator-slider" min="0" max="100" step="1" value="0">
+  <div id="dictator-value" class="value-display">给出 0 代币</div>
+  <div id="dictator-keep" class="sub-value">自留 100 代币</div>
+  <button id="dictator-confirm">确认分配</button>
+</section>
+
+<!-- 8. 结束 -->
+<section id="screen-end" class="screen">
+  <h2>实验结束</h2>
+  <p>感谢你的参与！</p>
+  <p class="hint">请点击下方按钮下载数据文件，并交给主试。</p>
+  <button id="btn-download">下载数据（CSV）</button>
+</section>
+
+<!-- 算术题覆盖层 -->
+<div id="arith-wrap">
+  <div id="arith-question">--</div>
+  <div id="arith-input"></div>
+  <div id="arith-hint">输入答案后按 Enter 提交</div>
+</div>
+
+<script>
+/* ============================================================
+   配置区：修改这里即可适配你的实验
+   ============================================================ */
+const CONFIG = {
+  audioDir: 'audio/',           // 音频文件夹（相对于本 HTML 文件）
+  audioFiles: {                 // 6 个音频文件名（必须与文件夹中完全一致）
+    neg_1: 'negative_1.wav',
+    neg_2: 'negative_2.wav',
+    neg_3: 'negative_3.wav',
+    neu_1: 'neutral_1.wav',
+    neu_2: 'neutral_2.wav',
+    neu_3: 'neutral_3.wav',
+  },
+  conditionLabels: {
+    neg_1: 'negative', neg_2: 'negative', neg_3: 'negative',
+    neu_1: 'neutral',  neu_2: 'neutral',  neu_3: 'neutral',
+  },
+  group: 'high_load',           // 固定为高认知负荷组
+  endowment: 100,                // 独裁者博弈禀赋
+  arithFirstDelay: [1500, 3000],// 首题出现前的随机延迟（毫秒）
+  arithWait: [2000, 3000],      // 每题之间的随机间隔（毫秒）
+  arithTimeout: 7000,           // 单题作答超时（毫秒）
+};
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function timestamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_` +
+         `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/* ============================================================
+   音频加载与预热
+   ============================================================ */
+function loadAudioFile(src) {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = src;
+    audio.addEventListener('loadedmetadata', () => resolve(audio), { once: true });
+    audio.addEventListener('error', () => reject(new Error('无法加载音频文件：' + src)), { once: true });
+    audio.load();
+  });
+}
+
+function warmUpAudios(audios) {
+  // 在用户点击“开始”后的手势中静默预播放一次，绕过自动播放限制
+  audios.forEach(a => {
+    try {
+      a.muted = true;
+      const p = a.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => { a.pause(); a.currentTime = 0; a.muted = false; })
+         .catch(() => { a.muted = false; });
+      } else {
+        a.pause(); a.currentTime = 0; a.muted = false;
+      }
+    } catch (e) { a.muted = false; }
+  });
+}
+
+/* ============================================================
+   算术题
+   ============================================================ */
+function makeArithmetic() {
+  if (Math.random() < 0.5) {
+    const a = randInt(10, 49);
+    const b = randInt(10, 99 - a);
+    return { text: `${a} + ${b} = ?`, answer: a + b };
+  } else {
+    const a = randInt(20, 99);
+    const b = randInt(10, a - 1);
+    return { text: `${a} − ${b} = ?`, answer: a - b };
+  }
+}
+
+let arithState = null;
+
+function presentArithmetic(audio) {
+  return new Promise(resolve => {
+    const q = makeArithmetic();
+    arithState = {
+      active: true,
+      value: '',
+      question: q,
+      startTime: performance.now(),
+      audio: audio,
+      resolve: resolve,
+      timeoutId: null,
+    };
+    $('arith-question').textContent = q.text;
+    $('arith-input').textContent = '';
+    $('arith-wrap').classList.add('active');
+    arithState.timeoutId = setTimeout(() => finishArithmetic(true), CONFIG.arithTimeout);
+  });
+}
+
+function finishArithmetic(timedOut) {
+  const st = arithState;
+  if (!st || !st.active) return;
+  st.active = false;
+  clearTimeout(st.timeoutId);
+
+  const rt = timedOut ? null : (performance.now() - st.startTime);
+  const resp = st.value;
+  const correct = !timedOut && resp !== '' && parseInt(resp, 10) === st.question.answer;
+  const audioElapsed = st.audio ? st.audio.currentTime : null;
+
+  const result = {
+    question: st.question.text,
+    correctAnswer: st.question.answer,
+    participantAnswer: timedOut ? 'TIMEOUT' : (resp || 'NO_RESPONSE'),
+    correct: correct ? 1 : 0,
+    rt: rt,
+    audioElapsed: audioElapsed,
+  };
+  $('arith-wrap').classList.remove('active');
+  arithState = null;
+  st.resolve(result);
+}
+
+// 全局键盘输入（仅在算术题活跃时响应）
+window.addEventListener('keydown', e => {
+  if (!arithState || !arithState.active) return;
+  if (/^[0-9]$/.test(e.key)) {
+    if (arithState.value.length < 3) {
+      arithState.value += e.key;
+      $('arith-input').textContent = arithState.value;
+    }
+    e.preventDefault();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    finishArithmetic(false);
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    arithState.value = arithState.value.slice(0, -1);
+    $('arith-input').textContent = arithState.value;
+  }
+});
+
+/* ============================================================
+   评分与独裁者博弈
+   ============================================================ */
+let ratingState = null;
+
+function runRating(opts) {
+  return new Promise(resolve => {
+    $('rating-title').textContent = opts.title;
+    $('rating-left').textContent = opts.leftLabel;
+    $('rating-mid').textContent = opts.midLabel || '';
+    $('rating-right').textContent = opts.rightLabel;
+    const slider = $('rating-slider');
+    slider.min = opts.min;
+    slider.max = opts.max;
+    slider.step = opts.step;
+    slider.value = opts.defaultValue;
+    $('rating-value').textContent = opts.defaultValue;
+    showScreen('screen-rating');
+    ratingState = { resolve: resolve, startTime: performance.now() };
+  });
+}
+
+$('rating-slider').addEventListener('input', () => {
+  $('rating-value').textContent = $('rating-slider').value;
+});
+
+$('rating-confirm').addEventListener('click', () => {
+  if (!ratingState) return;
+  const rt = performance.now() - ratingState.startTime;
+  const value = parseInt($('rating-slider').value, 10);
+  const st = ratingState;
+  ratingState = null;
+  st.resolve({ value: value, rt: Math.round(rt) });
+});
+
+let dictatorState = null;
+
+function updateDictatorDisplay() {
+  const give = parseInt($('dictator-slider').value, 10);
+  $('dictator-value').textContent = `给出 ${give} 代币`;
+  $('dictator-keep').textContent = `自留 ${CONFIG.endowment - give} 代币`;
+}
+
+/* ============================================================
+   共情评分（三条目同页，1–7）
+   ============================================================ */
+const EMPATHY_ITEMS = [
+  { key: 'empathy_feel',     label: '我能够理解她故事叙述中的感受。' },
+  { key: 'empathy_sympathy', label: '听她分享时，我会想象自己就是她，以此来理解她的感受。' },
+  { key: 'empathy_concern',  label: '刚刚听这位同伴分享时，听到她开心/难过，我也会感到开心/难过。' },
+];
+
+let empathyState = null;
+
+function buildEmpathyItems() {
+  const container = $('empathy-items');
+  container.innerHTML = '';
+  EMPATHY_ITEMS.forEach(item => {
+    const wrap = document.createElement('div');
+    wrap.className = 'empathy-item';
+    wrap.innerHTML = `
+      <div class="empathy-q">${item.label}</div>
+      <div class="slider-labels">
+        <span>非常不同意</span><span class="slider-mid">不确定</span><span>非常同意</span>
+      </div>
+      <input type="range" id="emp-${item.key}" min="1" max="7" step="1" value="4">
+      <div class="empathy-value" id="empval-${item.key}">4</div>
+    `;
+    container.appendChild(wrap);
+
+    const slider = wrap.querySelector('input');
+    const valEl  = wrap.querySelector('.empathy-value');
+    slider.addEventListener('input', () => { valEl.textContent = slider.value; });
+  });
+}
+
+function runEmpathy() {
+  return new Promise(resolve => {
+    buildEmpathyItems();
+    showScreen('screen-empathy');
+    empathyState = { resolve, startTime: performance.now() };
+  });
+}
+
+$('empathy-confirm').addEventListener('click', () => {
+  if (!empathyState) return;
+  const rt = performance.now() - empathyState.startTime;
+  const values = {};
+  EMPATHY_ITEMS.forEach(item => {
+    values[item.key] = parseInt($('emp-' + item.key).value, 10);
+  });
+  const arr  = EMPATHY_ITEMS.map(item => values[item.key]);
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const st = empathyState;
+  empathyState = null;
+  st.resolve({ values, mean, rt: Math.round(rt) });
+});
+
+function runDictator() {
+  return new Promise(resolve => {
+    const slider = $('dictator-slider');
+    slider.min = 0;
+    slider.max = CONFIG.endowment;
+    slider.step = 1;
+    slider.value = 0;
+    $('dictator-endowment').textContent = CONFIG.endowment;
+    $('dictator-max-label').textContent = CONFIG.endowment + ' 代币';
+    $('dictator-mid').textContent = `共 ${CONFIG.endowment} 代币`;
+    updateDictatorDisplay();
+    showScreen('screen-dictator');
+    dictatorState = { resolve: resolve, startTime: performance.now() };
+  });
+}
+
+$('dictator-slider').addEventListener('input', updateDictatorDisplay);
+
+$('dictator-confirm').addEventListener('click', () => {
+  if (!dictatorState) return;
+  const give = parseInt($('dictator-slider').value, 10);
+  const rt = performance.now() - dictatorState.startTime;
+  const st = dictatorState;
+  dictatorState = null;
+  st.resolve({ value: give, rt: Math.round(rt) });
+});
+
+/* ============================================================
+   音频播放 + 算术并行
+   ============================================================ */
+async function showAudioStartPrompt(audio) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;' +
+      'flex-direction:column;align-items:center;justify-content:center;z-index:999;';
+    overlay.innerHTML =
+      '<p style="font-size:20px;">浏览器阻止了音频播放，请点击下方按钮继续。</p>' +
+      '<button style="margin-top:20px;padding:12px 36px;font-size:18px;' +
+      'background:#2d7ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;">' +
+      '继续播放</button>';
+    const btn = overlay.querySelector('button');
+    btn.addEventListener('click', async () => {
+      document.body.removeChild(overlay);
+      try { await audio.play(); } catch (e) {}
+      resolve();
+    });
+    document.body.appendChild(overlay);
+  });
+}
+
+async function runAudioPhase(trial) {
+  showScreen('screen-audio');
+  const audio = trial.audio;
+  try { audio.pause(); } catch (e) {}
+  audio.currentTime = 0;
+  audio.muted = false;
+  audio.volume = 1;
+
+  let stopped = false;
+  const arithRecords = [];
+
+  // 先注册 ended 监听，防止短音频瞬间结束
+  const endedPromise = new Promise(resolve => {
+    audio.addEventListener('ended', () => { stopped = true; resolve(); }, { once: true });
+  });
+
+  try {
+    await audio.play();
+  } catch (e) {
+    await showAudioStartPrompt(audio);
+  }
+
+  // 算术题循环
+  const arithTask = (async () => {
+    let delay = rand(CONFIG.arithFirstDelay[0], CONFIG.arithFirstDelay[1]);
+    while (!stopped) {
+      await sleep(delay);
+      if (stopped) break;
+      const rec = await presentArithmetic(audio);
+      arithRecords.push(rec);
+      delay = rand(CONFIG.arithWait[0], CONFIG.arithWait[1]);
+    }
+  })();
+
+  await endedPromise;
+  stopped = true;
+  // 等待正在进行的那道题结束（作答或超时）
+  await arithTask;
+
+  try { audio.pause(); } catch (e) {}
+  return arithRecords;
+}
+
+/* ============================================================
+   等待按钮或空格
+   ============================================================ */
+function waitForButtonOrKey(buttonEl) {
+  return new Promise(resolve => {
+    function handler(e) {
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        cleanup(); resolve();
+      }
+    }
+    function btnHandler() { cleanup(); resolve(); }
+    function cleanup() {
+      window.removeEventListener('keydown', handler);
+      buttonEl.removeEventListener('click', btnHandler);
+    }
+    window.addEventListener('keydown', handler);
+    buttonEl.addEventListener('click', btnHandler);
+  });
+}
+
+/* ============================================================
+   单个试次
+   ============================================================ */
+async function runTrial(index, trial) {
+  // 提示
+  $('trial-prompt-title').textContent = `第 ${index + 1} / ${trials.length} 段音频`;
+  showScreen('screen-trial-prompt');
+  await waitForButtonOrKey($('btn-trial-continue'));
+  // 注视点
+  showScreen('screen-fixation');
+  await sleep(1000);
+  // 音频 + 算术
+  const arithRecords = await runAudioPhase(trial);
+  // 情绪效价评分（1–100）
+  const valence = await runRating({
+    title: '你认为刚刚这位同伴分享事件的情绪是积极的还是消极的？（0代表非常消极，100代表非常积极）',
+    leftLabel: '非常消极',
+    midLabel: '中性',
+    rightLabel: '非常积极',
+    min: 0, max: 100, step: 1, defaultValue: 50,
+  });
+   // 共情评分（三条目同页，1–7）
+  const empathy = await runEmpathy();
+  // 独裁者博弈
+  const dictator = await runDictator();
+  // 汇总算术表现
+  const n = arithRecords.length;
+  const nCorrect = arithRecords.filter(r => r.correct).length;
+
+  return {
+  participant: participantId,
+    group: CONFIG.group,
+    trialOrder: index + 1,
+    trialKey: trial.key,
+    condition: trial.condition,
+    audioFile: trial.file,
+    // 算术：只保留正确率
+    arithAccuracy: n ? (nCorrect / n) : null,
+    // 效价评分
+    valence: valence.value,
+    // 共情三条原始得分 + 平均分
+    empathyFeel:     empathy.values.empathy_feel,
+    empathySympathy: empathy.values.empathy_sympathy,
+    empathyConcern:  empathy.values.empathy_concern,
+    empathyMean:     empathy.mean,
+    // 独裁者博弈，给出代币
+    dgGive: dictator.value,  
+     };
+}
+/* ============================================================
+   主流程
+   ============================================================ */
+let participantId = '';
+let trials = [];
+let allData = [];
+
+async function initExperiment() {
+  participantId = ($('participant-id').value || '').trim() || 'anon';
+
+  const keys = Object.keys(CONFIG.audioFiles);
+  const audios = await Promise.all(
+    keys.map(k => loadAudioFile(CONFIG.audioDir + CONFIG.audioFiles[k]))
+  );
+
+  trials = keys.map((k, i) => ({
+    key: k,
+    condition: CONFIG.conditionLabels[k],
+    file: CONFIG.audioFiles[k],
+    audio: audios[i],
+    audioDuration: audios[i].duration,
+  }));
+  shuffle(trials);
+
+  // 用户手势内的静默预热，绕过自动播放限制
+  warmUpAudios(audios);
+
+  showScreen('screen-instruction');
+}
+
+async function runExperiment() {
+  for (let i = 0; i < trials.length; i++) {
+    const row = await runTrial(i, trials[i]);
+    allData.push(row);
+    console.table(allData);
+  }
+
+  // 计算负性、中性条件的被试水平汇总指标
+  const negTrials = allData.filter(r => r.condition === "negative");
+  const neuTrials = allData.filter(r => r.condition === "neutral");
+
+  const negDgMean = negTrials.length>0 ? negTrials.reduce((s,x)=>s+x.dgGive,0)/negTrials.length : null;
+  const neuDgMean = neuTrials.length>0 ? neuTrials.reduce((s,x)=>s+x.dgGive,0)/neuTrials.length : null;
+
+  const negEmpMean = negTrials.length>0 ? negTrials.reduce((s,x)=>s+x.empathyMean,0)/negTrials.length : null;
+  const neuEmpMean = neuTrials.length>0 ? neuTrials.reduce((s,x)=>s+x.empathyMean,0)/neuTrials.length : null;
+
+  // 将汇总指标附加每一行数据
+  allData = allData.map(row=>{
+      return {
+          ...row,
+          neg_dg_avg: negDgMean,          //三个负性音频分配代币平均数
+          neu_dg_avg: neuDgMean,          //三个中性音频分配代币平均数
+          neg_empathyMean_avg: negEmpMean, //三个负性共情平均分的平均
+          neu_empathyMean_avg: neuEmpMean  //三个中性共情平均分的平均
+      }
+  });
+
+  showScreen('screen-end');
+}
+
+/* ============================================================
+   CSV 导出
+   ============================================================ */
+function buildCsv(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const esc = v => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers.join(',')];
+  rows.forEach(row => lines.push(headers.map(h => esc(row[h])).join(',')));
+  return '\uFEFF' + lines.join('\r\n'); // BOM 让 Excel 正确识别中文
+}
+
+function downloadCsv() {
+  const csv = buildCsv(allData);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${participantId}_highLoad_${timestamp()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   事件绑定
+   ============================================================ */
+$('btn-start-experiment').addEventListener('click', async () => {
+  const btn = $('btn-start-experiment');
+  btn.disabled = true;
+  btn.textContent = '正在加载音频……';
+  $('load-error').textContent = '';
+  try {
+    await initExperiment();
+  } catch (e) {
+    $('load-error').textContent = e.message +
+      '\n请检查音频文件夹路径与文件名是否与 CONFIG 中的配置一致。';
+    btn.disabled = false;
+    btn.textContent = '重试';
+  }
+});
+
+$('btn-instruction-continue').addEventListener('click', () => {
+  runExperiment();
+});
+
+$('btn-download').addEventListener('click', downloadCsv);
+</script>
+</body>
+</html>
